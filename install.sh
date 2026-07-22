@@ -18,7 +18,6 @@ fi
 ROOT_PASS="root"    # MySQL root password (lab environment)
 BASE_DIR="/opt/vuln-apps"
 PHP_APPS=("dvwa" "bwapp" "xvwa" "mutillidae" "hackademic" "sqli-labs" "hackazon" "wackopicko")
-NODE_APPS=("juice-shop" "dvna")
 # ----------------------------------------------------
 
 echo -e "${GREEN}[+] Updating system and installing core dependencies...${NC}"
@@ -73,7 +72,6 @@ clone_repo "https://github.com/ethicalhack3r/DVWA" "$BASE_DIR/dvwa"
 
 # --- bWAPP: download from SourceForge ONLY if not already present ---
 BWAPP_DIR="$BASE_DIR/bwapp"
-# Check if bWAPP is already downloaded and extracted properly (check for key files)
 if [ -f "$BWAPP_DIR/bWAPP.sql" ] || [ -d "$BWAPP_DIR/inc" ]; then
     echo -e "${YELLOW}[!] bWAPP already exists in $BWAPP_DIR. Skipping download.${NC}"
 else
@@ -104,9 +102,7 @@ clone_repo "https://github.com/adamdoupe/WackoPicko" "$BASE_DIR/wackopicko"
 # ------------------- Clone Node.js Applications -------------------
 echo -e "${GREEN}[+] Cloning Node.js applications...${NC}"
 clone_repo "https://github.com/juice-shop/juice-shop" "$BASE_DIR/juice-shop"
-# --- DVNA: using the new official repository ---
 clone_repo "https://github.com/appsecco/dvna.git" "$BASE_DIR/dvna"
-# ------------------------------------------------
 
 # ------------------- Download WebGoat (Java JAR) -------------------
 echo -e "${GREEN}[+] Downloading WebGoat...${NC}"
@@ -121,7 +117,9 @@ cd -
 echo -e "${GREEN}[+] Symlinking PHP apps to /var/www/html/...${NC}"
 for app in "${PHP_APPS[@]}"; do
     if [ -d "$BASE_DIR/$app" ]; then
-        ln -sf "$BASE_DIR/$app" "/var/www/html/$app"
+        rm -rf "/var/www/html/$app" 2>/dev/null
+        ln -s "$BASE_DIR/$app" "/var/www/html/$app"
+        echo -e "  - Linked $app"
     fi
 done
 
@@ -225,6 +223,27 @@ cd -
 pm2 save
 pm2 startup systemd -u root --hp /root | tail -n 1
 
+# ------------------- Setup Apache Reverse Proxy for Node/Java Apps -------------------
+echo -e "${GREEN}[+] Configuring Apache Reverse Proxy to route paths to ports...${NC}"
+a2enmod proxy proxy_http
+
+# Create proxy configuration
+cat > /etc/apache2/sites-available/vuln-proxy.conf <<EOF
+# Reverse Proxy for Node.js and Java apps to work under paths
+ProxyPass /juice-shop http://localhost:3000/
+ProxyPassReverse /juice-shop http://localhost:3000/
+
+ProxyPass /dvna http://localhost:4000/
+ProxyPassReverse /dvna http://localhost:4000/
+
+ProxyPass /webgoat http://localhost:9090/WebGoat/
+ProxyPassReverse /webgoat http://localhost:9090/WebGoat/
+EOF
+
+# Enable the proxy site and reload Apache
+a2ensite vuln-proxy.conf
+systemctl reload apache2
+
 # ------------------- Final Permissions & Restart -------------------
 chown -R www-data:www-data /var/www/html/
 systemctl restart apache2
@@ -234,14 +253,13 @@ IP=$(hostname -I | awk '{print $1}')
 echo -e "\n${GREEN}========================================${NC}"
 echo -e "${GREEN}✅ INSTALLATION COMPLETE!${NC}"
 echo -e "${GREEN}========================================${NC}"
-echo -e "${YELLOW}📂 PHP Apps (Apache - Port 80):${NC}"
+echo -e "${YELLOW}📂 All Apps accessible via Paths (Port 80):${NC}"
 for app in "${PHP_APPS[@]}"; do
     echo -e "  - $app: http://${IP}/${app}/"
 done
-echo -e "${YELLOW}🚀 Standalone Apps (Managed by PM2):${NC}"
-echo -e "  - Juice Shop: http://${IP}:3000/"
-echo -e "  - DVNA: http://${IP}:4000/"
-echo -e "  - WebGoat: http://${IP}:9090/WebGoat/"
+echo -e "  - juice-shop: http://${IP}/juice-shop/"
+echo -e "  - dvna: http://${IP}/dvna/"
+echo -e "  - webgoat: http://${IP}/webgoat/"
 echo -e "${YELLOW}🔑 MySQL Credentials:${NC}"
 echo -e "  - Username: root"
 echo -e "  - Password: root"
