@@ -70,32 +70,33 @@ clone_repo() {
 # ------------------- Clone PHP Applications -------------------
 echo -e "${GREEN}[+] Cloning PHP-based applications...${NC}"
 clone_repo "https://github.com/ethicalhack3r/DVWA" "$BASE_DIR/dvwa"
-# --- bWAPP: download from SourceForge instead of GitHub ---
-echo -e "${GREEN}[+] Downloading bWAPP from SourceForge...${NC}"
+
+# --- bWAPP: download from SourceForge ONLY if not already present ---
 BWAPP_DIR="$BASE_DIR/bwapp"
-if [ -d "$BWAPP_DIR" ]; then
-    echo -e "${YELLOW}[!] bWAPP directory already exists. Removing it to get fresh copy...${NC}"
-    rm -rf "$BWAPP_DIR"
-fi
-# Download the latest zip from SourceForge
-wget --content-disposition https://sourceforge.net/projects/bwapp/files/bWAPP/bWAPP_latest.zip/download -O /tmp/bwapp.zip
-# Extract to base directory
-unzip /tmp/bwapp.zip -d "$BASE_DIR"
-# Rename extracted folder to 'bwapp' (the folder name might be 'bWAPP' or 'bWAPP-xxx')
-EXTRACTED_DIR=$(find "$BASE_DIR" -maxdepth 1 -type d -name "bWAPP*" | head -n 1)
-if [ -n "$EXTRACTED_DIR" ]; then
-    mv "$EXTRACTED_DIR" "$BWAPP_DIR"
+# Check if bWAPP is already downloaded and extracted properly (check for key files)
+if [ -f "$BWAPP_DIR/bWAPP.sql" ] || [ -d "$BWAPP_DIR/inc" ]; then
+    echo -e "${YELLOW}[!] bWAPP already exists in $BWAPP_DIR. Skipping download.${NC}"
 else
-    echo -e "${RED}[!] Could not find extracted bWAPP folder. Exiting.${NC}"
-    exit 1
+    echo -e "${GREEN}[+] Downloading bWAPP from SourceForge...${NC}"
+    if [ -d "$BWAPP_DIR" ]; then
+        rm -rf "$BWAPP_DIR"
+    fi
+    wget --content-disposition https://sourceforge.net/projects/bwapp/files/bWAPP/bWAPP_latest.zip/download -O /tmp/bwapp.zip
+    unzip /tmp/bwapp.zip -d "$BASE_DIR"
+    EXTRACTED_DIR=$(find "$BASE_DIR" -maxdepth 1 -type d -name "bWAPP*" | head -n 1)
+    if [ -n "$EXTRACTED_DIR" ]; then
+        mv "$EXTRACTED_DIR" "$BWAPP_DIR"
+    else
+        echo -e "${RED}[!] Could not find extracted bWAPP folder. Exiting.${NC}"
+        exit 1
+    fi
+    rm -f /tmp/bwapp.zip
 fi
-rm -f /tmp/bwapp.zip
-# ---------------------------------------------------------
+# ----------------------------------------------------------------
+
 clone_repo "https://github.com/s4n7h0/xvwa.git" "$BASE_DIR/xvwa"
 clone_repo "https://github.com/webpwnized/mutillidae" "$BASE_DIR/mutillidae"
-# --- Hackademic: using the official new repository ---
 clone_repo "https://github.com/Hackademic/hackademic.git" "$BASE_DIR/hackademic"
-# ----------------------------------------------------
 clone_repo "https://github.com/Audi-1/sqli-labs" "$BASE_DIR/sqli-labs"
 clone_repo "https://github.com/rapid7/hackazon" "$BASE_DIR/hackazon"
 clone_repo "https://github.com/adamdoupe/WackoPicko" "$BASE_DIR/wackopicko"
@@ -103,7 +104,9 @@ clone_repo "https://github.com/adamdoupe/WackoPicko" "$BASE_DIR/wackopicko"
 # ------------------- Clone Node.js Applications -------------------
 echo -e "${GREEN}[+] Cloning Node.js applications...${NC}"
 clone_repo "https://github.com/juice-shop/juice-shop" "$BASE_DIR/juice-shop"
-clone_repo "https://github.com/Ch0w/Damn-Vulnerable-NodeJS-Application" "$BASE_DIR/dvna"
+# --- DVNA: using the new official repository ---
+clone_repo "https://github.com/appsecco/dvna.git" "$BASE_DIR/dvna"
+# ------------------------------------------------
 
 # ------------------- Download WebGoat (Java JAR) -------------------
 echo -e "${GREEN}[+] Downloading WebGoat...${NC}"
@@ -146,7 +149,6 @@ fi
 if [ -f "/var/www/html/bwapp/bWAPP.sql" ]; then
     mysql -uroot -p${ROOT_PASS} bwapp < /var/www/html/bwapp/bWAPP.sql
 fi
-# bWAPP config file (if exists)
 if [ -f "/var/www/html/bwapp/inc/connect.inc.php" ]; then
     sed -i "s/root/${ROOT_PASS}/g" /var/www/html/bwapp/inc/connect.inc.php
 fi
@@ -168,7 +170,6 @@ fi
 if [ -f "/var/www/html/hackazon/install/database.sql" ]; then
     mysql -uroot -p${ROOT_PASS} hackazon < /var/www/html/hackazon/install/database.sql
     sed -i "s/'password' => ''/'password' => '${ROOT_PASS}'/g" /var/www/html/hackazon/application/config/database.php
-    # Run composer
     cd /var/www/html/hackazon
     composer install --no-dev --quiet
     cd -
@@ -181,8 +182,7 @@ if [ -f "/var/www/html/wackopicko/sql/wackopicko.sql" ]; then
     sed -i "s/password/${ROOT_PASS}/g" /var/www/html/wackopicko/conf/db.php
 fi
 
-# 7. Hackademic (updated to work with new repo structure)
-# The new repository places install.sql inside the 'db/' folder instead of 'sql/'
+# 7. Hackademic
 if [ -f "/var/www/html/hackademic/db/install.sql" ]; then
     mysql -uroot -p${ROOT_PASS} hackademic < /var/www/html/hackademic/db/install.sql
 elif [ -f "/var/www/html/hackademic/sql/install.sql" ]; then
