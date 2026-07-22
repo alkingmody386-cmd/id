@@ -1,7 +1,9 @@
 #!/bin/bash
 # ================================================================
-# 🚀 VulnLab Ultimate Installer - تنظيف Nakerah + تثبيت 11 خدمة
-# الإصدار: 3.0 (الكامل)
+# 🧹 VulnLab Complete Cleaner & Reinstaller
+# - ينظف كل شيء متعلق بـ VulnLab من السيرفر
+# - يعيد تثبيت جميع الخدمات الـ 11 من الصفر
+# الإصدار: 4.0 (التنظيف الشامل)
 # ================================================================
 
 set -euo pipefail
@@ -27,6 +29,7 @@ print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 print_error() { echo -e "${RED}❌ $1${NC}"; }
 print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
+print_danger() { echo -e "${RED}${BOLD}🔥 $1${NC}"; }
 
 # ---------- التحقق من الصلاحيات ----------
 if [[ $EUID -ne 0 ]]; then
@@ -34,97 +37,125 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# ---------- متغيرات قابلة للتخصيص ----------
+# ---------- قراءة المتغيرات ----------
 ROOT_PASS="${ROOT_PASS:-root}"
 BASE_DIR="${BASE_DIR:-/opt/vuln-apps}"
 JUICE_PORT="${JUICE_PORT:-3000}"
 DVNA_PORT="${DVNA_PORT:-4000}"
 WEBGOAT_PORT="${WEBGOAT_PORT:-9090}"
-LOG_FILE="/var/log/vulnlab-install.log"
+LOG_FILE="/var/log/vulnlab-clean-install.log"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 START_TIME=$(date +%s)
 
-# ================================================================
-# 🧹 المرحلة 1: التنظيف الكامل لـ Nakerah-lab
-# ================================================================
-print_header "🧹 المرحلة 1: إزالة Nakerah-lab نهائياً"
-
-# 1.1 إيقاف وإزالة عمليات PM2 الخاصة بـ Nakerah
-print_info "إيقاف وإزالة عمليات PM2 الخاصة بـ Nakerah..."
-if command -v pm2 &>/dev/null; then
-    pm2 list | grep -i nakerah && pm2 delete nakerah 2>/dev/null || true
-    pm2 list | grep -i "nakerah-lab" && pm2 delete nakerah-lab 2>/dev/null || true
-    pm2 save
+# ---------- تأكيد المستخدم ----------
+print_danger "هذا السكربت سيقوم بحذف كل ما يتعلق بـ VulnLab من السيرفر:"
+echo -e "  - مجلدات التطبيقات (${BASE_DIR})"
+echo -e "  - الروابط الرمزية في /var/www/html"
+echo -e "  - قواعد البيانات (dvwa, bwapp, ...)"
+echo -e "  - عمليات PM2 (juice-shop, dvna, webgoat)"
+echo -e "  - إعدادات Apache proxy"
+echo -e ""
+print_warning "سيتم بعدها إعادة تثبيت كل شيء من الصفر."
+echo -e ""
+read -p "هل أنت متأكد من المتابعة؟ (اكتب 'yes' للمتابعة): " CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+    print_error "تم الإلغاء."
+    exit 0
 fi
 
-# 1.2 إيقاف خدمات systemd (إن وجدت)
-print_info "إيقاف خدمات systemd الخاصة بـ Nakerah..."
-systemctl stop nakerah 2>/dev/null || true
-systemctl disable nakerah 2>/dev/null || true
-rm -f /etc/systemd/system/nakerah.service
-systemctl daemon-reload
+# ================================================================
+# 🧹 المرحلة 1: التنظيف الشامل
+# ================================================================
+print_header "🧹 المرحلة 1: التنظيف الشامل للسيرفر (خاص بـ VulnLab)"
 
-# 1.3 حذف مجلدات Nakerah
-print_info "حذف مجلدات Nakerah..."
-NAKERAH_DIRS=(
-    "/opt/nakerah"
-    "/opt/Nakerah-lab"
-    "/opt/nakerah-lab"
-    "/var/www/html/nakerah"
-    "/var/www/html/Nakerah-lab"
-    "$HOME/Nakerah-lab"
-    "$HOME/nakerah"
-    "/root/Nakerah-lab"
-    "/root/nakerah"
-)
-for dir in "${NAKERAH_DIRS[@]}"; do
-    if [ -d "$dir" ]; then
-        rm -rf "$dir"
-        print_success "تم حذف: $dir"
+# 1.1 إيقاف وإزالة عمليات PM2
+print_info "إيقاف وإزالة جميع عمليات PM2 الخاصة بـ VulnLab..."
+if command -v pm2 &>/dev/null; then
+    pm2 delete juice-shop 2>/dev/null || true
+    pm2 delete dvna 2>/dev/null || true
+    pm2 delete webgoat 2>/dev/null || true
+    pm2 delete nakerah 2>/dev/null || true
+    pm2 delete nakerah-lab 2>/dev/null || true
+    pm2 save 2>/dev/null || true
+    pm2 kill 2>/dev/null || true
+    print_success "تم إيقاف عمليات PM2."
+fi
+
+# 1.2 إيقاف خدمات systemd
+print_info "إيقاف خدمات systemd..."
+systemctl stop apache2 2>/dev/null || true
+systemctl stop mysql 2>/dev/null || true
+systemctl disable apache2 2>/dev/null || true
+systemctl disable mysql 2>/dev/null || true
+
+# 1.3 حذف مجلد التطبيقات بالكامل
+print_info "حذف مجلد التطبيقات: $BASE_DIR ..."
+if [ -d "$BASE_DIR" ]; then
+    rm -rf "$BASE_DIR"
+    print_success "تم حذف $BASE_DIR"
+fi
+
+# 1.4 حذف الروابط الرمزية لتطبيقات PHP
+print_info "حذف الروابط الرمزية في /var/www/html..."
+for app in dvwa bwapp xvwa mutillidae hackademic sqli-labs hackazon wackopicko; do
+    if [ -L "/var/www/html/$app" ] || [ -d "/var/www/html/$app" ]; then
+        rm -rf "/var/www/html/$app"
+        print_success "تم حذف /var/www/html/$app"
     fi
 done
 
-# 1.4 حذف أي روابط رمزية لـ Nakerah في /var/www/html
-print_info "إزالة أي روابط رمزية لـ Nakerah..."
-find /var/www/html -maxdepth 1 -type l -name "*nakerah*" -exec rm -f {} \; 2>/dev/null || true
-
-# 1.5 إزالة قواعد بيانات Nakerah
-print_info "حذف قواعد بيانات Nakerah (إن وجدت)..."
-if mysql -u root -p${ROOT_PASS} -e "SHOW DATABASES;" 2>/dev/null | grep -q nakerah; then
-    mysql -u root -p${ROOT_PASS} -e "DROP DATABASE IF EXISTS nakerah_db;" 2>/dev/null || true
-    mysql -u root -p${ROOT_PASS} -e "DROP DATABASE IF EXISTS nakerah;" 2>/dev/null || true
-    print_success "تم حذف قواعد بيانات Nakerah."
+# 1.5 حذف إعدادات Apache proxy
+print_info "حذف إعدادات Apache proxy..."
+if [ -f /etc/apache2/sites-available/vuln-proxy.conf ]; then
+    a2dissite vuln-proxy.conf 2>/dev/null || true
+    rm -f /etc/apache2/sites-available/vuln-proxy.conf
 fi
-
-# 1.6 تنظيف Apache من أي Proxy أو VirtualHost خاص بـ Nakerah
-print_info "تنظيف إعدادات Apache الخاصة بـ Nakerah..."
 if [ -f /etc/apache2/sites-available/nakerah.conf ]; then
     a2dissite nakerah.conf 2>/dev/null || true
     rm -f /etc/apache2/sites-available/nakerah.conf
 fi
-if [ -f /etc/apache2/sites-available/vuln-proxy.conf ]; then
-    # إذا كان proxy قديم من Nakerah، سنقوم بحذفه وإعادة إنشائه لاحقاً
-    a2dissite vuln-proxy.conf 2>/dev/null || true
-    rm -f /etc/apache2/sites-available/vuln-proxy.conf
+systemctl reload apache2 2>/dev/null || true
+
+# 1.6 حذف قواعد البيانات
+print_info "حذف قواعد البيانات..."
+if command -v mysql &>/dev/null; then
+    # بدء MySQL مؤقتاً إذا لم يكن يعمل
+    systemctl start mysql 2>/dev/null || true
+    for db in dvwa bwapp mutillidae sqli_labs hackazon wackopicko hackademic xvwa nakerah_db nakerah; do
+        mysql -u root -p${ROOT_PASS} -e "DROP DATABASE IF EXISTS $db;" 2>/dev/null || true
+        print_success "تم حذف قاعدة البيانات: $db"
+    done
+    # حذف مستخدمي MySQL المرتبطين (إن وجدوا)
+    mysql -u root -p${ROOT_PASS} -e "DROP USER IF EXISTS 'dvwa'@'localhost';" 2>/dev/null || true
+    mysql -u root -p${ROOT_PASS} -e "DROP USER IF EXISTS 'bwapp'@'localhost';" 2>/dev/null || true
+    mysql -u root -p${ROOT_PASS} -e "DROP USER IF EXISTS 'mutillidae'@'localhost';" 2>/dev/null || true
+    mysql -u root -p${ROOT_PASS} -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+    systemctl stop mysql 2>/dev/null || true
 fi
-systemctl reload apache2
 
-# 1.7 حذف أي ملفات مؤقتة أو سجلات
-print_info "حذف الملفات المؤقتة والسجلات..."
+# 1.7 حذف ملفات مؤقتة
+print_info "حذف الملفات المؤقتة..."
 rm -f /tmp/bwapp.zip 2>/dev/null || true
-rm -f /tmp/nakerah* 2>/dev/null || true
+rm -f /tmp/*nakerah* 2>/dev/null || true
 
-print_success "✅ تم تنظيف Nakerah-lab بالكامل!"
+# 1.8 إعادة ضبط PM2 (حذف ملفات الحالة)
+print_info "إعادة ضبط PM2..."
+if [ -d /root/.pm2 ]; then
+    rm -rf /root/.pm2
+    print_success "تم حذف /root/.pm2"
+fi
+
+print_success "✅ اكتمل التنظيف الشامل!"
 
 # ================================================================
-# 🚀 المرحلة 2: تثبيت جميع الخدمات الـ 11 من الصفر
+# 🚀 المرحلة 2: إعادة التثبيت من الصفر
 # ================================================================
-print_header "🚀 المرحلة 2: تثبيت جميع الخدمات الـ 11"
+print_header "🚀 المرحلة 2: إعادة تثبيت جميع الخدمات الـ 11 من الصفر"
 
-# 2.1 تحديث النظام وتثبيت التبعيات
+# 2.1 تحديث النظام وتثبيت التبعيات (مرة أخرى للتأكد من النظافة)
 print_info "تحديث النظام وتثبيت الحزم الأساسية..."
 export DEBIAN_FRONTEND=noninteractive
 apt update && apt upgrade -y
@@ -134,7 +165,7 @@ apt install -y \
     unzip git curl wget default-jre default-jdk nodejs npm \
     build-essential python3 make g++ net-tools
 
-# 2.2 تثبيت Composer و PM2
+# 2.2 إعادة تثبيت Composer و PM2
 print_info "تثبيت Composer..."
 curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
@@ -148,9 +179,12 @@ systemctl enable apache2
 systemctl start mysql
 systemctl enable mysql
 
+# تعيين كلمة مرور MySQL (نظيفة)
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${ROOT_PASS}';" 2>/dev/null || true
+mysql -e "FLUSH PRIVILEGES;" 2>/dev/null || true
 print_success "MySQL password: ${ROOT_PASS}"
 
+# تهيئة Apache
 sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 a2enmod rewrite
 systemctl restart apache2
@@ -360,7 +394,7 @@ echo -e "\n${CYAN}${BOLD}📊 حالة الخدمات (PM2):${NC}"
 pm2 list
 
 echo -e "\n${CYAN}${BOLD}📝 سجل التثبيت:${NC} $LOG_FILE"
-echo -e "\n${GREEN}${BOLD}شكراً لاستخدامك VulnLab Ultimate Installer! 🎉${NC}"
+echo -e "\n${GREEN}${BOLD}شكراً لاستخدامك VulnLab Clean Installer! 🎉${NC}"
 
 # فتح المنافذ (اختياري)
 if command -v ufw &>/dev/null; then
