@@ -91,7 +91,8 @@ else
 fi
 rm -f /tmp/bwapp.zip
 # ---------------------------------------------------------
-clone_repo "https://github.com/juuso/xvwa" "$BASE_DIR/xvwa"
+# xvwa: using the new repository provided by the user
+clone_repo "https://github.com/s4n7h0/xvwa.git" "$BASE_DIR/xvwa"
 clone_repo "https://github.com/webpwnized/mutillidae" "$BASE_DIR/mutillidae"
 clone_repo "https://github.com/Stamparm/hackademic" "$BASE_DIR/hackademic"
 clone_repo "https://github.com/Audi-1/sqli-labs" "$BASE_DIR/sqli-labs"
