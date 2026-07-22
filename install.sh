@@ -91,10 +91,11 @@ else
 fi
 rm -f /tmp/bwapp.zip
 # ---------------------------------------------------------
-# xvwa: using the new repository provided by the user
 clone_repo "https://github.com/s4n7h0/xvwa.git" "$BASE_DIR/xvwa"
 clone_repo "https://github.com/webpwnized/mutillidae" "$BASE_DIR/mutillidae"
-clone_repo "https://github.com/Stamparm/hackademic" "$BASE_DIR/hackademic"
+# --- Hackademic: using the official new repository ---
+clone_repo "https://github.com/Hackademic/hackademic.git" "$BASE_DIR/hackademic"
+# ----------------------------------------------------
 clone_repo "https://github.com/Audi-1/sqli-labs" "$BASE_DIR/sqli-labs"
 clone_repo "https://github.com/rapid7/hackazon" "$BASE_DIR/hackazon"
 clone_repo "https://github.com/adamdoupe/WackoPicko" "$BASE_DIR/wackopicko"
@@ -180,9 +181,14 @@ if [ -f "/var/www/html/wackopicko/sql/wackopicko.sql" ]; then
     sed -i "s/password/${ROOT_PASS}/g" /var/www/html/wackopicko/conf/db.php
 fi
 
-# 7. Hackademic
-if [ -f "/var/www/html/hackademic/sql/install.sql" ]; then
+# 7. Hackademic (updated to work with new repo structure)
+# The new repository places install.sql inside the 'db/' folder instead of 'sql/'
+if [ -f "/var/www/html/hackademic/db/install.sql" ]; then
+    mysql -uroot -p${ROOT_PASS} hackademic < /var/www/html/hackademic/db/install.sql
+elif [ -f "/var/www/html/hackademic/sql/install.sql" ]; then
     mysql -uroot -p${ROOT_PASS} hackademic < /var/www/html/hackademic/sql/install.sql
+else
+    echo -e "${YELLOW}[!] Hackademic SQL file not found. Skipping DB import.${NC}"
 fi
 
 # 8. xVWA
