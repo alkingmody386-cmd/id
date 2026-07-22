@@ -3,7 +3,8 @@
 # 🧹 VulnLab Professional Cleaner & Reinstaller
 # - Completely removes all VulnLab components
 # - Freshly installs all 11 vulnerable applications
-# Version: 5.0 (Professional Edition)
+# - Node.js 20.x LTS for Juice Shop compatibility
+# Version: 5.1 (Node.js 20 fix)
 # ================================================================
 
 set -euo pipefail
@@ -197,12 +198,24 @@ install_dependencies() {
     print_info "Updating system and installing core packages..."
     export DEBIAN_FRONTEND=noninteractive
     apt update && apt upgrade -y
+    # Install Node.js 20.x from NodeSource (required for Juice Shop)
+    print_info "Installing Node.js 20.x LTS from NodeSource..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt install -y nodejs
+
+    # Install other required packages (without nodejs/npm from apt)
     apt install -y --no-install-recommends \
         apache2 mysql-server php libapache2-mod-php \
         php-mysql php-gd php-xml php-mbstring php-curl php-zip php-json \
-        unzip git curl wget default-jre default-jdk nodejs npm \
+        unzip git curl wget default-jre default-jdk \
         build-essential python3 make g++ net-tools
-    print_success "Dependencies installed."
+
+    # Verify Node version
+    NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+    if [[ $NODE_VERSION -lt 20 ]]; then
+        die "Node.js version is $NODE_VERSION, but v20+ is required. Installation failed."
+    fi
+    print_success "Node.js $(node -v) installed successfully."
 }
 
 install_composer_pm2() {
